@@ -22,8 +22,7 @@ pipeline {
     stage('Build') {
       steps {
         dir(env.APP_DIR) {
-          sh 'chmod +x ./gradlew || true'
-          sh './gradlew --no-daemon clean build'
+          sh './gradlew build'
         }
       }
     }
@@ -31,7 +30,7 @@ pipeline {
     stage('Test') {
       steps {
         dir(env.APP_DIR) {
-          sh './gradlew --no-daemon test'
+          sh './gradlew test'
         }
       }
       post {
