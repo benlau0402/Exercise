@@ -9,7 +9,7 @@ pipeline {
 
   tools {
     // Ensure a JDK is available on your Jenkins agents; adjust name to what you've configured in Jenkins Global Tool Config
-    jdk 'jdk17'
+    jdk 'jdk21'
   }
 
   environment {
