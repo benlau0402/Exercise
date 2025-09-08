@@ -1,0 +1,23 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'com.example'
+version = '1.0.0'
+
+repositories { mavenCentral() }
+
+dependencies { testImplementation 'junit:junit:4.13.2' }
+
+application {
+    mainClass = 'main.java.com.example.App'
+}
+
+tasks.test { useJUnit() }
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'main.java.com.example.App' 
+    }
+}
