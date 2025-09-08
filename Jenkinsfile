@@ -1,77 +1,66 @@
 pipeline {
   agent any
 
-  environment {
-    APP_DIR  = 'Exercise'                 // Gradle project lives here
-    JAR_NAME = 'Exercise-1.0.0.jar'       // optional hint; auto-fallback if different
-  }
-
   options {
     timestamps()
+    ansiColor('xterm')
     buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  tools {
+    // Ensure a JDK is available on your Jenkins agents; adjust name to what you've configured in Jenkins Global Tool Config
+    jdk 'jdk17'
+  }
+
+  environment {
+    // Change if your project lives in a subfolder
+    APP_DIR = '.'
   }
 
   stages {
     stage('Checkout') {
-      steps { checkout scm }
-    }
-
-    stage('Sanity') {
       steps {
-        sh '''
-          echo "Workspace:"; pwd
-          echo "Root files:"; ls -la | sed -n '1,80p'
-          echo "Exercise/ files:"; ls -la Exercise || true
-        '''
+        checkout scm
       }
     }
 
-    stage('Build & Test (Gradle wrapper at repo root)') {
+    stage('Build') {
       steps {
-        sh '''
-          set -e
-          # Ensure wrapper is executable
-          chmod +x ./gradlew || true
-
-          # Run from repo root, but target the Exercise project
-          ./gradlew --no-daemon -p Exercise clean build test
-        '''
-      }
-      post {
-        always {
-          // JUnit XML is produced under the subproject
-          junit 'Exercise/build/test-results/test/*.xml'
-          // Archive built jars from the subproject
-          archiveArtifacts artifacts: 'Exercise/build/libs/*.jar', fingerprint: true
+        dir(env.APP_DIR) {
+          sh './gradlew clean build -x test'
         }
       }
     }
 
-    stage('Deploy (run JAR)') {
+    stage('Test') {
       steps {
-        sh '''
-          set -e
-          CANDIDATE="Exercise/build/libs/'"${JAR_NAME}"'"
-          if [ -f Exercise/build/libs/"${JAR_NAME}" ]; then
-            JAR_PATH="Exercise/build/libs/${JAR_NAME}"
-          else
-            echo "Hint JAR not found. Auto-detecting…"
-            JAR_PATH=$(ls -1 Exercise/build/libs/*.jar | head -n 1)
-          fi
-          echo "Running: ${JAR_PATH}"
-          java -jar "${JAR_PATH}"
-        '''
+        dir(env.APP_DIR) {
+          sh './gradlew test'
+        }
+      }
+      post {
+        always {
+          junit allowEmptyResults: true, testResults: '**/build/test-results/test/*.xml'
+        }
+      }
+    }
+
+    stage('Package') {
+      steps {
+        dir(env.APP_DIR) {
+          sh './gradlew jar'
+        }
       }
     }
   }
 
   post {
-    always {
-      echo 'Archiving artifacts & cleaning workspace'
-      archiveArtifacts artifacts: 'Exercise/build/libs/*.jar', fingerprint: true
-      deleteDir()
+    success {
+      archiveArtifacts artifacts: '**/build/libs/*.jar', fingerprint: true
     }
-    success { echo "Build #${env.BUILD_NUMBER} ✅" }
-    failure { echo "Build #${env.BUILD_NUMBER} ❌" }
+    always {
+      // Useful for debugging Gradle builds
+      archiveArtifacts artifacts: '**/build/reports/tests/test/**', allowEmptyArchive: true
+    }
   }
 }
