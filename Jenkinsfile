@@ -3,23 +3,26 @@ pipeline {
 
   options {
     timestamps()
-    ansiColor('xterm')
     buildDiscarder(logRotator(numToKeepStr: '20'))
   }
 
-  tools {
-    jdk 'jdk17'
-  }
-
   environment {
-    // Change if your project lives in a subfolder
-    APP_DIR = '.'
+    APP_DIR = '.'   // change if your Gradle project is in a subfolder
   }
 
   stages {
     stage('Checkout') {
       steps {
         checkout scm
+      }
+    }
+
+    stage('Prepare') {
+      steps {
+        dir(env.APP_DIR) {
+          sh 'chmod +x ./gradlew'
+          sh './gradlew --version'   // sanity check Java/Gradle
+        }
       }
     }
 
@@ -58,7 +61,6 @@ pipeline {
       archiveArtifacts artifacts: '**/build/libs/*.jar', fingerprint: true
     }
     always {
-      // Useful for debugging Gradle builds
       archiveArtifacts artifacts: '**/build/reports/tests/test/**', allowEmptyArchive: true
     }
   }
