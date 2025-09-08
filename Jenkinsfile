@@ -2,8 +2,8 @@ pipeline {
   agent any
 
   environment {
-    APP_DIR  = 'Exercise'                 // your app is inside /Exercise
-    JAR_NAME = 'Exercise-1.0.0.jar'       // optional hint; we auto-fallback if different
+    APP_DIR  = 'Exercise'                 // Gradle project lives here
+    JAR_NAME = 'Exercise-1.0.0.jar'       // optional hint; auto-fallback if different
   }
 
   options {
@@ -13,54 +13,54 @@ pipeline {
 
   stages {
     stage('Checkout') {
+      steps { checkout scm }
+    }
+
+    stage('Sanity') {
       steps {
-        // If your Jenkins job is already linked to this repo, you can use: checkout scm
-        checkout scm
+        sh '''
+          echo "Workspace:"; pwd
+          echo "Root files:"; ls -la | sed -n '1,80p'
+          echo "Exercise/ files:"; ls -la Exercise || true
+        '''
       }
     }
 
-    stage('Build') {
+    stage('Build & Test (Gradle wrapper at repo root)') {
       steps {
-        dir(env.APP_DIR) {
-          sh './gradlew build'
-        }
-      }
-    }
+        sh '''
+          set -e
+          # Ensure wrapper is executable
+          chmod +x ./gradlew || true
 
-    stage('Test') {
-      steps {
-        dir(env.APP_DIR) {
-          sh './gradlew test'
-        }
+          # Run from repo root, but target the Exercise project
+          ./gradlew --no-daemon -p Exercise clean build test
+        '''
       }
       post {
         always {
-          junit "${env.APP_DIR}/build/test-results/test/*.xml"
+          // JUnit XML is produced under the subproject
+          junit 'Exercise/build/test-results/test/*.xml'
+          // Archive built jars from the subproject
+          archiveArtifacts artifacts: 'Exercise/build/libs/*.jar', fingerprint: true
         }
       }
     }
 
     stage('Deploy (run JAR)') {
       steps {
-        dir(env.APP_DIR) {
-          sh '''
-            set -e
-            echo "Running packaged JAR..."
-
-            # Prefer the configured JAR_NAME; else pick the first JAR under build/libs
-            CANDIDATE="build/libs/$JAR_NAME"
-            if [ -f "$CANDIDATE" ]; then
-              JAR_PATH="$CANDIDATE"
-            else
-              echo "Hint JAR not found ($CANDIDATE). Auto-detecting..."
-              JAR_PATH=$(ls -1 build/libs/*.jar | head -n 1)
-              echo "Using: $JAR_PATH"
-            fi
-
-            # Run the console app (prints then exits)
-            java -jar "$JAR_PATH"
-          '''
-        }
+        sh '''
+          set -e
+          CANDIDATE="Exercise/build/libs/'"${JAR_NAME}"'"
+          if [ -f Exercise/build/libs/"${JAR_NAME}" ]; then
+            JAR_PATH="Exercise/build/libs/${JAR_NAME}"
+          else
+            echo "Hint JAR not found. Auto-detecting…"
+            JAR_PATH=$(ls -1 Exercise/build/libs/*.jar | head -n 1)
+          fi
+          echo "Running: ${JAR_PATH}"
+          java -jar "${JAR_PATH}"
+        '''
       }
     }
   }
@@ -68,7 +68,7 @@ pipeline {
   post {
     always {
       echo 'Archiving artifacts & cleaning workspace'
-      archiveArtifacts artifacts: "${env.APP_DIR}/build/libs/*.jar", fingerprint: true
+      archiveArtifacts artifacts: 'Exercise/build/libs/*.jar', fingerprint: true
       deleteDir()
     }
     success { echo "Build #${env.BUILD_NUMBER} ✅" }
